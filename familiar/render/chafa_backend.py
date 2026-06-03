@@ -9,6 +9,7 @@ from pathlib import Path
 from PIL import Image
 
 FONT_RATIO = 0.5
+CHAFA_SYMBOLS = "block,border,braille,ascii"
 
 
 def chafa_size(image: Image.Image, height: int) -> tuple[int, int]:
@@ -29,7 +30,7 @@ def _render_with_python(image: Image.Image, *, height: int) -> str:
     )
 
     symbol_map = chafa.SymbolMap()
-    symbol_map.add_by_tags(chafa.SymbolTags.CHAFA_SYMBOL_TAG_ALL)
+    symbol_map.apply_selectors(CHAFA_SYMBOLS)
 
     config = chafa.CanvasConfig()
     config.width = width
@@ -70,7 +71,7 @@ def _render_with_cli(image: Image.Image, *, height: int) -> str:
                 "--colors",
                 "none",
                 "--symbols",
-                "all",
+                CHAFA_SYMBOLS,
                 "--size",
                 f"{width}x{height}",
                 str(path),

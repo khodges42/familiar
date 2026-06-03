@@ -38,6 +38,25 @@ def _visible_bbox(image: Image.Image, threshold: int = 8):
     return mask.getbbox()
 
 
+def _remove_threshold_background(image: Image.Image, threshold: int) -> Image.Image:
+    image = image.convert("RGBA")
+    corner = image.getpixel((0, 0))[:3]
+    pixels = image.load()
+    for y in range(image.height):
+        for x in range(image.width):
+            red, green, blue, alpha = pixels[x, y]
+            distance = (
+                abs(red - corner[0])
+                + abs(green - corner[1])
+                + abs(blue - corner[2])
+            ) / 3
+            if distance < threshold:
+                pixels[x, y] = (red, green, blue, 0)
+            else:
+                pixels[x, y] = (red, green, blue, alpha)
+    return image
+
+
 def prepare_image(
     image: Image.Image,
     *,
@@ -58,21 +77,7 @@ def prepare_image(
             ) from exc
         image = remove(image)
     elif background == "threshold":
-        image = image.convert("RGBA")
-        corner = image.getpixel((0, 0))[:3]
-        pixels = image.load()
-        for y in range(image.height):
-            for x in range(image.width):
-                red, green, blue, alpha = pixels[x, y]
-                distance = (
-                    abs(red - corner[0])
-                    + abs(green - corner[1])
-                    + abs(blue - corner[2])
-                )
-                if distance < threshold:
-                    pixels[x, y] = (red, green, blue, 0)
-                else:
-                    pixels[x, y] = (red, green, blue, alpha)
+        image = _remove_threshold_background(image, threshold)
     elif background == "keep":
         image = image.convert("RGB").convert("RGBA")
     else:
@@ -124,21 +129,7 @@ def prepare_source_image(
             ) from exc
         image = remove(image)
     elif background == "threshold":
-        image = image.convert("RGBA")
-        corner = image.getpixel((0, 0))[:3]
-        pixels = image.load()
-        for y in range(image.height):
-            for x in range(image.width):
-                red, green, blue, alpha = pixels[x, y]
-                distance = (
-                    abs(red - corner[0])
-                    + abs(green - corner[1])
-                    + abs(blue - corner[2])
-                )
-                if distance < threshold:
-                    pixels[x, y] = (red, green, blue, 0)
-                else:
-                    pixels[x, y] = (red, green, blue, alpha)
+        image = _remove_threshold_background(image, threshold)
     elif background == "keep":
         image = image.convert("RGB").convert("RGBA")
     else:

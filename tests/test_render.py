@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from familiar.render.image import render_braille, render_image
+from familiar.render.image import prepare_source_image, render_braille, render_image
 
 
 def test_braille_bit_mapping():
@@ -21,6 +21,41 @@ def test_ascii_renderer_uses_alpha_spaces(tmp_path: Path):
     rendered = render_image(path, height=2, mode="ascii", crop=False)
 
     assert "@" in rendered
+
+
+def test_threshold_background_removes_off_white_edges():
+    image = Image.new("RGB", (4, 4), "white")
+    image.putpixel((0, 1), (220, 220, 220))
+    image.putpixel((1, 1), (0, 0, 0))
+
+    prepared = prepare_source_image(
+        image,
+        background="threshold",
+        threshold=128,
+        crop=False,
+    )
+
+    assert prepared.getpixel((0, 1))[3] == 0
+    assert prepared.getpixel((1, 1))[3] == 255
+
+
+def test_threshold_background_crops_to_foreground(tmp_path: Path):
+    image = Image.new("RGB", (4, 4), "white")
+    image.putpixel((0, 1), (220, 220, 220))
+    image.putpixel((1, 1), (0, 0, 0))
+    path = tmp_path / "white-background.png"
+    image.save(path)
+
+    rendered = render_image(
+        path,
+        height=2,
+        mode="ascii",
+        background="threshold",
+        threshold=128,
+    )
+
+    assert "@" in rendered
+    assert "." not in rendered
 
 
 def test_line_renderer_emits_line_characters(tmp_path: Path):
