@@ -1,4 +1,5 @@
 from familiar.bubble import render_bubble
+from familiar.text_width import display_width
 
 
 def test_bubble_wraps_and_preserves_newlines():
@@ -7,6 +8,13 @@ def test_bubble_wraps_and_preserves_newlines():
     assert "Proxy" in rendered
     assert "hello" in rendered
     assert "again" in rendered
+
+
+def test_titled_bubble_lines_have_matching_width():
+    rendered = render_bubble("hello", title="Proxy")
+    widths = {display_width(line) for line in rendered.splitlines()}
+
+    assert len(widths) == 1
 
 
 def test_bubble_handles_long_words():

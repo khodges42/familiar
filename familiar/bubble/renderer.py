@@ -75,7 +75,7 @@ def render_bubble(
 
     if title:
         title_text = f" {title} "
-        remaining = max(0, body_width - len(title_text))
+        remaining = max(0, body_width - len(title_text) - 1)
         top = (
             f"{style.top_left}{style.horizontal}{title_text}"
             f"{style.horizontal * remaining}{style.top_right}"

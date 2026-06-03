@@ -1,0 +1,18 @@
+{
+  "name": "Interject",
+  "default_mood": "neutral",
+  "moods": [
+    "angry",
+    "curious",
+    "excited",
+    "neutral",
+    "sad",
+    "surprised"
+  ],
+  "source": "characters\\interject\\source_images",
+  "renderer": {
+    "mode": "chafa",
+    "height": 30,
+    "background": "alpha"
+  }
+}
