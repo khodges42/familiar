@@ -11,6 +11,8 @@ Modes:
 * `braille`: default and highest fidelity for portraits.
 * `ascii`: classic brightness ramp.
 * `block`: shade blocks for stronger silhouettes.
+* `line`: edge direction mapped to line-drawing characters.
+* `ink`: dark-stroke rendering for black-on-white line art.
 
 Alpha handling is enabled by default. Transparent pixels render as spaces, and
 visible content is cropped unless `--no-crop` is passed.

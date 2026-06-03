@@ -284,7 +284,7 @@ def preview(
 def forge_preview(
     image: Path,
     heights: Annotated[str, typer.Option("--heights")] = "16,24,32",
-    modes: Annotated[str, typer.Option("--modes")] = "braille,ascii,block",
+    modes: Annotated[str, typer.Option("--modes")] = "braille,ascii,block,line,ink",
 ) -> None:
     """Compare render modes and heights for an image."""
     try:

@@ -7,6 +7,24 @@ from PIL import Image, ImageEnhance
 ASCII_RAMP = " .:-=+*#%@"
 BLOCK_RAMP = " ░▒▓█"
 BRAILLE_DOTS = (0x01, 0x02, 0x04, 0x40, 0x08, 0x10, 0x20, 0x80)
+QUADRANTS = {
+    0b0000: " ",
+    0b0001: "▘",
+    0b0010: "▝",
+    0b0011: "▀",
+    0b0100: "▖",
+    0b0101: "▌",
+    0b0110: "▞",
+    0b0111: "▛",
+    0b1000: "▗",
+    0b1001: "▚",
+    0b1010: "▐",
+    0b1011: "▜",
+    0b1100: "▄",
+    0b1101: "▙",
+    0b1110: "▟",
+    0b1111: "█",
+}
 
 
 def _visible_bbox(image: Image.Image, threshold: int = 8):
@@ -83,6 +101,34 @@ def prepare_image(
     return image
 
 
+def prepare_square_subpixel_image(
+    image: Image.Image,
+    *,
+    height: int,
+    crop: bool = True,
+    pad: int = 0,
+    background: str = "threshold",
+    threshold: int = 245,
+    contrast: float = 1.0,
+    invert: bool = False,
+) -> Image.Image:
+    """Prepare an image for renderers whose subpixels are roughly square."""
+    image = prepare_image(
+        image,
+        height=height * 2,
+        crop=crop,
+        pad=pad,
+        background=background,
+        threshold=threshold,
+        contrast=contrast,
+        invert=invert,
+    )
+    ratio = image.width / max(1, image.height)
+    width = max(2, round(height * ratio) * 2)
+    pixel_height = max(2, height * 2)
+    return image.resize((width, pixel_height), Image.Resampling.LANCZOS)
+
+
 def _ramp(value: int, ramp: str) -> str:
     index = round((value / 255) * (len(ramp) - 1))
     return ramp[index]
@@ -103,6 +149,84 @@ def render_ascii(image: Image.Image, *, ramp: str = ASCII_RAMP) -> str:
 
 def render_block(image: Image.Image) -> str:
     return render_ascii(image, ramp=BLOCK_RAMP)
+
+
+def render_ink(image: Image.Image, *, threshold: int = 180) -> str:
+    """Render dark ink boundaries with Unicode quadrant block characters."""
+    image = image.convert("RGBA")
+    width = image.width if image.width % 2 == 0 else image.width + 1
+    height = image.height if image.height % 2 == 0 else image.height + 1
+    canvas = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    canvas.alpha_composite(image)
+    gray = canvas.convert("LA")
+
+    def is_dark(px: int, py: int) -> bool:
+        if px < 0 or py < 0 or px >= width or py >= height:
+            return False
+        value, alpha = gray.getpixel((px, py))
+        return alpha > 0 and value < threshold
+
+    def is_boundary(px: int, py: int) -> bool:
+        if not is_dark(px, py):
+            return False
+        for nx, ny in (
+            (px - 1, py),
+            (px + 1, py),
+            (px, py - 1),
+            (px, py + 1),
+        ):
+            if not is_dark(nx, ny):
+                return True
+        return False
+
+    lines: list[str] = []
+    for y in range(0, height, 2):
+        chars: list[str] = []
+        for x in range(0, width, 2):
+            bits = 0
+            for bit, (dx, dy) in enumerate(((0, 0), (1, 0), (0, 1), (1, 1))):
+                if is_boundary(x + dx, y + dy):
+                    bits |= 1 << bit
+            chars.append(QUADRANTS[bits])
+        lines.append("".join(chars).rstrip())
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _line_char(gx: int, gy: int, magnitude: int, threshold: int) -> str:
+    if magnitude < threshold:
+        return " "
+    abs_x = abs(gx)
+    abs_y = abs(gy)
+    if abs_x > abs_y * 2:
+        return "│"
+    if abs_y > abs_x * 2:
+        return "─"
+    return "╲" if gx * gy > 0 else "╱"
+
+
+def render_line(image: Image.Image, *, threshold: int = 80) -> str:
+    """Render image edges with line-drawing characters."""
+    image = image.convert("RGBA")
+    gray = image.convert("LA")
+
+    def effective_intensity(px: int, py: int) -> int:
+        value, alpha = gray.getpixel((px, py))
+        return 255 if alpha == 0 else value
+
+    lines: list[str] = []
+    for y in range(image.height):
+        line: list[str] = []
+        for x in range(image.width):
+            left = effective_intensity(max(0, x - 1), y)
+            right = effective_intensity(min(image.width - 1, x + 1), y)
+            up = effective_intensity(x, max(0, y - 1))
+            down = effective_intensity(x, min(image.height - 1, y + 1))
+            gx = int(right) - int(left)
+            gy = int(down) - int(up)
+            magnitude = abs(gx) + abs(gy)
+            line.append(_line_char(gx, gy, magnitude, threshold))
+        lines.append("".join(line).rstrip())
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_braille(image: Image.Image, *, threshold: int = 128) -> str:
@@ -146,6 +270,22 @@ def render_image(
     debug: Path | None = None,
 ) -> str:
     image = Image.open(path)
+    if mode == "ink":
+        prepared = prepare_square_subpixel_image(
+            image,
+            height=height,
+            crop=crop,
+            pad=pad,
+            background=background if background != "alpha" else "threshold",
+            threshold=threshold,
+            contrast=contrast,
+            invert=invert,
+        )
+        if debug:
+            debug.parent.mkdir(parents=True, exist_ok=True)
+            prepared.save(debug)
+        return render_ink(prepared, threshold=threshold)
+
     prepared = prepare_image(
         image,
         height=height,
@@ -163,6 +303,8 @@ def render_image(
         return render_ascii(prepared)
     if mode == "block":
         return render_block(prepared)
+    if mode == "line":
+        return render_line(prepared, threshold=threshold)
     if mode == "braille":
         return render_braille(prepared, threshold=threshold)
     raise ValueError(f"unsupported render mode: {mode}")

@@ -11,8 +11,8 @@
   ],
   "source": "characters\\proxy\\source_images",
   "renderer": {
-    "mode": "braille",
-    "height": 32,
-    "background": "alpha"
+    "mode": "ink",
+    "height": 24,
+    "background": "threshold"
   }
 }
