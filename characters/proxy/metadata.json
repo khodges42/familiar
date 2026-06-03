@@ -11,8 +11,8 @@
   ],
   "source": "characters\\proxy\\source_images",
   "renderer": {
-    "mode": "ink",
-    "height": 24,
+    "mode": "ascii",
+    "height": 16,
     "background": "threshold"
   }
 }

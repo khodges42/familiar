@@ -4,6 +4,8 @@ from pathlib import Path
 
 from PIL import Image, ImageEnhance
 
+from familiar.render.chafa_backend import render_chafa
+
 ASCII_RAMP = " .:-=+*#%@"
 BLOCK_RAMP = " ░▒▓█"
 BRAILLE_DOTS = (0x01, 0x02, 0x04, 0x40, 0x08, 0x10, 0x20, 0x80)
@@ -25,6 +27,7 @@ QUADRANTS = {
     0b1110: "▟",
     0b1111: "█",
 }
+INK_BITS = ((0, 0), (1, 0), (0, 1), (1, 1))
 
 
 def _visible_bbox(image: Image.Image, threshold: int = 8):
@@ -101,6 +104,67 @@ def prepare_image(
     return image
 
 
+def prepare_source_image(
+    image: Image.Image,
+    *,
+    crop: bool = True,
+    pad: int = 0,
+    background: str = "alpha",
+    threshold: int = 128,
+    contrast: float = 1.0,
+    invert: bool = False,
+) -> Image.Image:
+    """Prepare image alpha/background without terminal-cell resizing."""
+    if background == "remove":
+        try:
+            from rembg import remove
+        except ImportError as exc:
+            raise RuntimeError(
+                "background removal requires installing familiar[background]"
+            ) from exc
+        image = remove(image)
+    elif background == "threshold":
+        image = image.convert("RGBA")
+        corner = image.getpixel((0, 0))[:3]
+        pixels = image.load()
+        for y in range(image.height):
+            for x in range(image.width):
+                red, green, blue, alpha = pixels[x, y]
+                distance = (
+                    abs(red - corner[0])
+                    + abs(green - corner[1])
+                    + abs(blue - corner[2])
+                )
+                if distance < threshold:
+                    pixels[x, y] = (red, green, blue, 0)
+                else:
+                    pixels[x, y] = (red, green, blue, alpha)
+    elif background == "keep":
+        image = image.convert("RGB").convert("RGBA")
+    else:
+        image = image.convert("RGBA")
+
+    if crop:
+        bbox = _visible_bbox(image)
+        if bbox:
+            image = image.crop(bbox)
+    if pad:
+        padded = Image.new(
+            "RGBA",
+            (image.width + pad * 2, image.height + pad * 2),
+            (0, 0, 0, 0),
+        )
+        padded.alpha_composite(image, (pad, pad))
+        image = padded
+    if contrast != 1.0:
+        image = ImageEnhance.Contrast(image).enhance(contrast)
+    if invert:
+        rgb = Image.eval(image.convert("RGB"), lambda value: 255 - value)
+        rgb.putalpha(image.getchannel("A"))
+        image = rgb
+    return image
+
+
 def prepare_square_subpixel_image(
     image: Image.Image,
     *,
@@ -151,44 +215,88 @@ def render_block(image: Image.Image) -> str:
     return render_ascii(image, ramp=BLOCK_RAMP)
 
 
+def _ink_char(bits: int) -> str:
+    count = bits.bit_count()
+    if count == 0:
+        return " "
+    if count == 1:
+        return "·"
+    if bits in {0b0011, 0b1100}:
+        return "─"
+    if bits in {0b0101, 0b1010}:
+        return "│"
+    if bits == 0b1001:
+        return "╲"
+    if bits == 0b0110:
+        return "╱"
+    if count == 2:
+        return QUADRANTS[bits]
+    if count == 3:
+        return QUADRANTS[bits]
+    return "▪"
+
+
 def render_ink(image: Image.Image, *, threshold: int = 180) -> str:
-    """Render dark ink boundaries with Unicode quadrant block characters."""
+    """Render dark ink as thinned strokes with compact glyphs."""
     image = image.convert("RGBA")
     width = image.width if image.width % 2 == 0 else image.width + 1
     height = image.height if image.height % 2 == 0 else image.height + 1
     canvas = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     canvas.alpha_composite(image)
     gray = canvas.convert("LA")
+    dark_mask = [
+        [
+            gray.getpixel((x, y))[1] > 0 and gray.getpixel((x, y))[0] < threshold
+            for x in range(width)
+        ]
+        for y in range(height)
+    ]
 
     def is_dark(px: int, py: int) -> bool:
         if px < 0 or py < 0 or px >= width or py >= height:
             return False
-        value, alpha = gray.getpixel((px, py))
-        return alpha > 0 and value < threshold
+        return dark_mask[py][px]
 
-    def is_boundary(px: int, py: int) -> bool:
-        if not is_dark(px, py):
-            return False
-        for nx, ny in (
-            (px - 1, py),
-            (px + 1, py),
-            (px, py - 1),
-            (px, py + 1),
-        ):
-            if not is_dark(nx, ny):
-                return True
-        return False
+    mask = [
+        [
+            dark_mask[y][x]
+            and not (
+                is_dark(x - 1, y)
+                and is_dark(x + 1, y)
+                and is_dark(x, y - 1)
+                and is_dark(x, y + 1)
+            )
+            for x in range(width)
+        ]
+        for y in range(height)
+    ]
 
-    lines: list[str] = []
+    rows: list[list[str]] = []
     for y in range(0, height, 2):
         chars: list[str] = []
         for x in range(0, width, 2):
             bits = 0
-            for bit, (dx, dy) in enumerate(((0, 0), (1, 0), (0, 1), (1, 1))):
-                if is_boundary(x + dx, y + dy):
+            for bit, (dx, dy) in enumerate(INK_BITS):
+                if mask[y + dy][x + dx]:
                     bits |= 1 << bit
-            chars.append(QUADRANTS[bits])
-        lines.append("".join(chars).rstrip())
+            chars.append(_ink_char(bits))
+        rows.append(chars)
+
+    for y, row in enumerate(rows):
+        for x, char in enumerate(row):
+            if char != "·":
+                continue
+            neighbors = 0
+            for ny in range(max(0, y - 1), min(len(rows), y + 2)):
+                for nx in range(max(0, x - 1), min(len(row), x + 2)):
+                    if nx == x and ny == y:
+                        continue
+                    if rows[ny][nx] != " ":
+                        neighbors += 1
+            if neighbors < 2:
+                row[x] = " "
+
+    lines = ["".join(row).rstrip() for row in rows]
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -270,6 +378,21 @@ def render_image(
     debug: Path | None = None,
 ) -> str:
     image = Image.open(path)
+    if mode == "chafa":
+        prepared = prepare_source_image(
+            image,
+            crop=crop,
+            pad=pad,
+            background=background,
+            threshold=threshold,
+            contrast=contrast,
+            invert=invert,
+        )
+        if debug:
+            debug.parent.mkdir(parents=True, exist_ok=True)
+            prepared.save(debug)
+        return render_chafa(prepared, height=height)
+
     if mode == "ink":
         prepared = prepare_square_subpixel_image(
             image,

@@ -13,6 +13,7 @@ Modes:
 * `block`: shade blocks for stronger silhouettes.
 * `line`: edge direction mapped to line-drawing characters.
 * `ink`: dark-stroke rendering for black-on-white line art.
+* `chafa`: optional Chafa backend for higher-quality symbol selection.
 
 Alpha handling is enabled by default. Transparent pixels render as spaces, and
 visible content is cropped unless `--no-crop` is passed.
@@ -29,4 +30,12 @@ Useful tuning flags:
 ```bash
 familiar forge image.png --height 40 --mode braille --contrast 1.4 --threshold 120
 familiar forge-preview image.png --heights 16,24,32 --modes braille,ascii,block
+```
+
+Chafa mode requires either `chafa.py` with `libchafa` available, or a `chafa`
+executable on `PATH`:
+
+```bash
+pip install "familiar[chafa]"
+familiar forge image.png --mode chafa --height 24
 ```

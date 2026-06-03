@@ -45,4 +45,15 @@ def test_ink_renderer_uses_quadrants(tmp_path: Path):
 
     rendered = render_image(path, height=4, mode="ink", threshold=200)
 
-    assert any(char in rendered for char in "▘▝▀▖▌▞▛▗▚▐▜▄▙▟█")
+    assert any(char in rendered for char in "·─│╱╲▘▝▀▖▌▞▛▗▚▐▜▄▙▟▪")
+
+
+def test_chafa_mode_reports_missing_backend(tmp_path: Path):
+    image = Image.new("RGB", (4, 4), "white")
+    path = tmp_path / "chafa.png"
+    image.save(path)
+
+    try:
+        render_image(path, height=4, mode="chafa")
+    except RuntimeError as exc:
+        assert "Chafa rendering requires" in str(exc)

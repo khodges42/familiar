@@ -19,6 +19,9 @@ dev = [
 background = [
     "rembg>=2.0.0",
 ]
+chafa = [
+    "chafa.py>=1.2.0",
+]
 
 [project.scripts]
 familiar = "familiar.cli:main"
