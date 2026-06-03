@@ -1,0 +1,52 @@
+[project]
+name = "familiar"
+version = "0.1.0"
+description = "Terminal companions for humans and machines."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+dependencies = [
+    "pillow>=10.0.0",
+    "rich>=13.0.0",
+    "typer>=0.12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.5.0",
+]
+background = [
+    "rembg>=2.0.0",
+]
+
+[project.scripts]
+familiar = "familiar.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"characters" = "familiar/characters"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "familiar",
+    "characters",
+    "docs",
+    "tests",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
