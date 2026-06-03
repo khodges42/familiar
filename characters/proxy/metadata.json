@@ -11,8 +11,8 @@
   ],
   "source": "characters\\proxy\\source_images",
   "renderer": {
-    "mode": "ascii",
-    "height": 16,
-    "background": "threshold"
+    "mode": "chafa",
+    "height": 30,
+    "background": "alpha"
   }
 }
